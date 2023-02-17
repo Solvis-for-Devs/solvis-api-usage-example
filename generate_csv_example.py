@@ -79,7 +79,7 @@ def request_api(token: str, page: int):
     # session = requests.Session()
 
     response_survey = session.get(
-        f'https://staging.solvis.net.br/api/v1/surveys/{survey_id}/'
+        f'https://sistema.solvis.net.br/api/v1/surveys/{survey_id}/'
         f'evaluations?search_date_scope={scope}&start_date={start_date}'
         f'&end_date={end_date}&page={str(page)}',
         headers=headers,
