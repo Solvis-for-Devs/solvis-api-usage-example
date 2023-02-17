@@ -133,11 +133,11 @@ while True:
                     # NPS question type
                     if questions[i]['answer_type'] == 'NPS':
                         try:
-                            df_answers.loc[idx, 'NPS_Original'] = questions[i]['answers'][i]['answer_value']
+                            df_answers.loc[idx, 'NPS_Original'] = questions[i]['answers'][0]['answer_value']
                         except (KeyError, TypeError):
                             df_answers.loc[idx, 'NPS_Original'] = np.nan
                         try:
-                            df_answers.loc[idx, 'NPS_Tipo'] = (questions[i]['answers'][i]['answer_text'])
+                            df_answers.loc[idx, 'NPS_Tipo'] = (questions[i]['answers'][0]['answer_text'])
                         except (KeyError, TypeError):
                             df_answers.loc[idx, 'NPS_Tipo'] = np.nan
 
