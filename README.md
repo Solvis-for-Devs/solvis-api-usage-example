@@ -1,2 +1,2 @@
-# solvis-api_usage-example
-An example to how to use Solvis Integration API in python
+# Solvis API Usage Example
+An example to how to use Solvis Integration API to generate a .csv file in python
