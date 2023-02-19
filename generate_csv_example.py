@@ -170,38 +170,134 @@ while True:
                             except (KeyError, TypeError):
                                 pass
 
+
+while True:
+    try:
+        response = request_api(access_token, page)
+    except (ConnectionError, ConnectionAbortedError) as error:
+        print(error)
+
+    if response.status_code == 401:
+        print('Access token inválido.')
+        access_token = get_access_token(login_user, login_pwd)
+        session = requests.Session()
+
+    elif response.status_code == 500:
+        print('Servidor indisponível.')
+        time.sleep(5)
+
+    elif response.status_code == 200:
+        try:
+            json = response.json()
+        except JSONDecodeError as error:
+            print(error)
+
+        answers = json['data']
+        count = len(answers)
+
+        if answers:
+            for idx in range(len(answers)):
+                questions = answers[idx].pop('formatted_answers')
+                df_answers = pd.json_normalize(answers[idx])
+                df_answers.set_index(pd.Index([idx]), inplace=True)
+
+                for i in range(len(questions)):
+                    # NPS question type
+                    if questions[i]['answer_type'] == 'NPS':
+                        try:
+                            df_answers.loc[idx, 'NPS_Original'] = questions[i]['answers'][0]['answer_value']
+                        except (KeyError, TypeError):
+                            df_answers.loc[idx, 'NPS_Original'] = np.nan
+                        try:
+                            df_answers.loc[idx, 'NPS_Tipo'] = (questions[i]['answers'][0]['answer_text'])
+                        except (KeyError, TypeError):
+                            df_answers.loc[idx, 'NPS_Tipo'] = np.nan
+
+                    # SCALE question type
+                    elif questions[i]['answer_type'] == 'Scale':
+                        for choice in range(len(questions[i]['answers'])):
+                            column_name = questions[i]['answers'][choice]['question_text']
+                            try:
+                                df_answers.loc[idx, column_name] = questions[i]['answers'][0]['choice_text']
+                                df_answers.loc[idx, column_name + '_valor'] = int(float((questions[i]['answers'][0]['choice_value'])))
+                            except (KeyError, TypeError):
+                                df_answers.loc[idx, column_name] = np.nan
+                                df_answers.loc[idx, column_name + '_valor'] = np.nan
+
+                    # TEXT question type
+                    elif questions[i]['answer_type'] in ('Text', 'Short Text'):
+                        column_name = questions[i]['answers'][0]['question_text']
+                        try:
+                            df_answers.loc[idx, column_name] = questions[i]['answers'][0]['choice_value']
+                        except (KeyError, TypeError):
+                            df_answers.loc[idx, column_name] = np.nan
+
+                    # MULTIPLE CHOICE question type
+                    elif questions[i]['answer_type'] == 'Multiple Choice':
+                        for choice in range(len(questions[i]['answers'])):
+                            column_name = questions[i]['answers'][choice]['question_text']
+                            try:
+                                df_answers.loc[idx, column_name] = questions[i]['answers'][0]['choice_text']
+                            except (KeyError, TypeError):
+                                df_answers.loc[idx, column_name] = np.nan
+                            try:
+                                df_answers.loc[idx, questions[i]['answers'][choice]['additional_field'].split(': ')[1][:-1]] = questions[i]['answers'][0]['additional_field_answer']
+                            except (KeyError, TypeError):
+                                pass
+
                     # MULTIPLE RESPONSE question type
                     elif questions[i]['answer_type'] == 'Multiple Response':
                         for k, v in questions[i]['answers'].items():
-                            for choice in v:
+                            if len(v) > 1:
+                                for choice in v:
+                                    try:
+                                        df_answers.loc[idx, f"{k}_{choice['choice_text']}"] = 1
+                                    except KeyError:
+                                        pass
+                                    try:
+                                        df_answers.loc[idx, f'{k}_Comentario'] = choice['additional_field_answer']
+                                    except KeyError:
+                                        pass
+                            else:
+                                column_name = questions[i]['answers'][k][0]['choice_text']
                                 try:
-                                    df_answers.loc[idx, f'{k}_{choice}'] = 1
+                                    df_answers.loc[idx, f"{k}_{column_name}"] = 1
+                                    df_answers[f"{k}_{column_name}"] = df_answers[f"{k}_{column_name}"].astype('bool')
                                 except (KeyError, TypeError):
-                                    df_answers.loc[idx, f'{k}_{choice}'] = 0
+                                    df_answers.loc[idx, f"{k}_{column_name}"] = np.nan
+                                    df_answers[f"{k}_{column_name}"] = df_answers[f"{k}_{column_name}"].astype('bool')
+                                try:
+                                    df_answers.loc[idx, f'{k}_Comentario'] = questions[i]['answers'][k][0]['additional_field_answer']
+                                except KeyError:
+                                    pass
 
                     # PHONE question type
                     elif questions[i]['answer_type'] == 'Phone':
+                        column_name = questions[i]['answers'][0][0]['question_text']
                         try:
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = questions[i]['answers'][0][0]['choice_text']
+                            df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except (KeyError, TypeError):
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = np.nan
+                            df_answers.loc[idx, column_name] = np.nan
 
                     # CPF question type
                     elif questions[i]['answer_type'] == 'CPF':
+                        column_name = questions[i]['answers'][0][0]['question_text']
                         try:
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = questions[i]['answers'][0][0]['choice_text']
+                            df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except (KeyError, TypeError):
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = np.nan
+                            df_answers.loc[idx, column_name] = np.nan
 
                     # CNPJ question type
                     elif questions[i]['answer_type'] == 'CNPJ':
+                        column_name = questions[i]['answers'][0][0]['question_text']
                         try:
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = questions[i]['answers'][0][0]['choice_text']
+                            df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except (KeyError, TypeError):
-                            df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = np.nan
+                            df_answers.loc[idx, column_name] = np.nan
 
                     # EMAIL question type
                     elif questions[i]['answer_type'] == 'Email':
+                        column_name = questions[i]['answers'][0][0]['question_text']
                         try:
                             df_answers.loc[idx, questions[i]['answers'][0][0]['question_text']] = questions[i]['answers'][0][0]['choice_text']
                         except (KeyError, TypeError):
@@ -211,8 +307,10 @@ while True:
 
             print(f'Página: {page} - OK!')
             page += 1
+            total = total + count
         else:
             print('Fim da exportação!')
+            print(f'Total de avaliações: {total}')
             break
 
 
