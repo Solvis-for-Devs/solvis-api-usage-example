@@ -146,9 +146,11 @@ while True:
                         for choice in range(len(questions[i]['answers'])):
                             try:
                                 df_answers.loc[idx, questions[i]['answers'][choice]['question_text']] = questions[i]['answers'][choice]['choice_text']
-                                df_answers.loc[idx, questions[i]['answers'][choice]['question_text'] + '_valor'] = int(float((questions[i]['answers'][choice]['choice_value'])))
                             except (KeyError, TypeError):
                                 df_answers.loc[idx, questions[i]['answers'][choice]['question_text']] = np.nan
+                            try:
+                                df_answers.loc[idx, questions[i]['answers'][choice]['question_text'] + '_valor'] = int(float((questions[i]['answers'][choice]['choice_value'])))
+                            except (KeyError, TypeError):
                                 df_answers.loc[idx, questions[i]['answers'][choice]['question_text'] + '_valor'] = np.nan
 
                     # TEXT question type
