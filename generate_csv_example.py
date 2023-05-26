@@ -161,11 +161,12 @@ while True:
 
                     # TEXT question type
                     elif questions[i]['answer_type'] in ('Text', 'Short Text'):
-                        column_name = questions[i]['answers'][0]['question_text']
-                        try:
-                            df_answers.loc[idx, column_name] = questions[i]['answers'][0]['choice_value']
-                        except KeyError:
-                            df_answers.loc[idx, column_name] = np.nan
+                        for choice in range(len(questions[i]['answers'])):
+                            column_name = questions[i]['answers'][choice]['question_text']
+                            try:
+                                df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_value']
+                            except KeyError:
+                                df_answers.loc[idx, column_name] = np.nan
 
                     # MULTIPLE CHOICE question type
                     elif questions[i]['answer_type'] == 'Multiple Choice':
