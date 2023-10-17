@@ -2,36 +2,39 @@
 import pandas as pd
 import numpy as np
 import requests
-import time
 from json import JSONDecodeError
 
 
 # Input params
-survey_id = 'XXXXX'  # ID DA PESQUISA
-start_date = 'XXXXX'  # DATA INICIAL NO FORMATO "YYYY-MM-DDTHH:MM:SS" (O "T" É OBRIGATÓRIO)
-end_date = 'XXXXX'  # DATA INICIAL NO FORMATO "YYYY-MM-DDTHH:MM:SS" (O "T" É OBRIGATÓRIO)
+survey_id = 'XXXXXXXXXX'  # ID DA PESQUISA
+start_date = 'XXXXXXXXXX'  # DATA INICIAL NO FORMATO "YYYY-MM-DDTHH:MM:SS" (O "T" É OBRIGATÓRIO)
+end_date = 'XXXXXXXXXX'  # DATA INICIAL NO FORMATO "YYYY-MM-DDTHH:MM:SS" (O "T" É OBRIGATÓRIO)
 scope = 'answered_at'  # ESCOPO DA CONSULTA, SE É PELA DATA DE RESPOSTA NO TOTEM ("answered_at") OU SE É PELA DATA DA INSERÇÃO NO BANCO DE DADOS ("received_at")
 
 
 # Login & Password
-login_user = 'XXXXX'  # USUÁRIO DA API
-login_pwd = 'XXXXX'  # SENHA DO USUÁRIO DA API
+login_user = 'XXXXXXXXXX'  # USUÁRIO DA API
+login_pwd = 'XXXXXXXXXX'  # SENHA DO USUÁRIO DA API
 
 
 # Functions
-def get_access_token(login: str, password: str):
+def get_access_token(user: str, password: str):
     """POST API and return access token
 
     Args:
-        login (str): Login (login_user)
-        password (str): Password (login_pwd)
+        user (str): User
+        password (str): Password
+        env (str): [sistema, staging]
 
     Raises:
-        Exception: Login/Senha incorreto. Favor verificar!
+        Exception: Usuário/Senha incorreto. Favor verificar!
 
     Returns:
         str: Access Token
     """
+    user = login_user
+    password = login_pwd
+
     headers_token = {
         'accept': '*/*',
         'Content-Type': 'application/json',
@@ -39,14 +42,14 @@ def get_access_token(login: str, password: str):
 
     # Set headers content
     data_token = (
-        '{"username":' + f'"{login}",'
+        '{"username":' + f'"{user}",'
         f'"password":"{password}",'
         '"refresh_token":""}'
     )
 
     # POST for token
     response = requests.post(
-        "https://sistema.solvis.net.br/api/v1/oauth/token",
+        'https://sistema.solvis.net.br/api/v1/oauth/token',
         headers=headers_token,
         data=data_token
     )
@@ -56,43 +59,36 @@ def get_access_token(login: str, password: str):
         access_token = response.json()['access_token']
         return access_token
     except KeyError:
-        raise Exception('Login/Senha incorreto. Favor verificar!')
+        raise Exception('Usuário/Senha incorreto. Favor verificar!')
 
 
-def request_api(token: str, page: int):
-    """ GET API and return JSON
+def request_api(access_token: str, page: int):
+    """ Get API and return JSON
 
     Args:
-        token (str): Access token
-        page (int): Page number
-
     Returns:
-        str: JSON
+        json: JSON
     """
     # Set headers
     headers = {
         'accept': '*/*',
-        'Authorization': f'Bearer {token}',
+        'Authorization': f'Bearer {access_token}',
     }
 
-    # # Create session
-    # session = requests.Session()
+    # Create session
+    session = requests.Session()
 
     response_survey = session.get(
-        f'https://sistema.solvis.net.br/api/v1/surveys/{survey_id}/evaluations?'
-        f'search_date_scope={scope}&'
+        f'https://sistema.solvis.net.br/api/v1/surveys/'
+        f'{survey_id}/evaluations?search_date_scope={scope}&'
         f'start_date={start_date}&'
         f'end_date={end_date}&'
-        f'page={str(page)}',
+        f'page={str(page)}&'
+        'per_page=100',
         headers=headers,
     )
 
     return response_survey
-
-
-# Create session
-session = requests.Session()
-
 
 # Create empty dataframe
 df = pd.DataFrame()
@@ -127,6 +123,7 @@ while True:
             print(error)
 
         answers = json['data']
+        count = len(answers)
 
         if answers:
             for idx in range(len(answers)):
@@ -138,45 +135,65 @@ while True:
                     # NPS question type
                     if questions[i]['answer_type'] == 'NPS':
                         try:
-                            df_answers.loc[idx, 'NPS_Original'] = questions[i]['answers'][0]['answer_value']
+                            # df_answers['nps_original'] = np.nan
+                            df_answers['nps_original'] = str(np.nan)
+                            # df_answers['nps_original'] = df_answers['nps_original'].astype('float')
+                            df_answers.loc[idx, 'nps_original'] = questions[i]['answers'][0]['answer_value']
                         except KeyError:
-                            df_answers.loc[idx, 'NPS_Original'] = np.nan
+                            pass
+                            # df_answers.loc[idx, 'nps_original'] = np.nan
                         try:
-                            df_answers.loc[idx, 'NPS_Tipo'] = questions[i]['answers'][0]['answer_text']
+                            # df_answers['nps_tipo'] = ''
+                            df_answers['nps_tipo'] = str(np.nan)
+                            df_answers.loc[idx, 'nps_tipo'] = questions[i]['answers'][0]['answer_text']
                         except KeyError:
-                            df_answers.loc[idx, 'NPS_Tipo'] = np.nan
+                            pass
+                            # df_answers.loc[idx, 'nps_tipo'] = np.nan
 
                     # SCALE question type
                     elif questions[i]['answer_type'] == 'Scale':
                         for choice in range(len(questions[i]['answers'])):
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
+                                # df_answers[column_name] = ''
+                                df_answers[column_name] = str(np.nan)
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
                             except KeyError:
-                                df_answers.loc[idx, column_name] = np.nan
+                                pass
+                                # df_answers.loc[idx, column_name] = np.nan
                             try:
-                                df_answers.loc[idx, f'{column_name}_valor'] = int(float((questions[i]['answers'][choice]['choice_value'])))
-                            except KeyError:
-                                df_answers.loc[idx, f'{column_name}_valor'] = np.nan
+                                # df_answers[f'{column_name}_valor'] = np.nan
+                                df_answers[f'{column_name}_valor'] = str(np.nan)
+                                df_answers.loc[idx, f'{column_name}_valor'] = float((questions[i]['answers'][choice]['choice_value']))
+                            except (KeyError, TypeError):
+                                pass
+                                # df_answers.loc[idx, f'{column_name}_valor'] = np.nan
 
                     # TEXT question type
                     elif questions[i]['answer_type'] in ('Text', 'Short Text'):
                         for choice in range(len(questions[i]['answers'])):
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
+                                # df_answers[column_name] = ''
+                                df_answers[column_name] = str(np.nan)
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_value']
                             except KeyError:
-                                df_answers.loc[idx, column_name] = np.nan
+                                pass
+                                # df_answers.loc[idx, column_name] = np.nan
 
                     # MULTIPLE CHOICE question type
                     elif questions[i]['answer_type'] == 'Multiple Choice':
                         for choice in range(len(questions[i]['answers'])):
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
+                                # df_answers[column_name] = ''
+                                df_answers[column_name] = str(np.nan)
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
                             except KeyError:
-                                df_answers.loc[idx, column_name] = np.nan
+                                pass
+                                # df_answers.loc[idx, column_name] = np.nan
                             try:
+                                df_answers[f'{column_name}_{questions[i]["answers"][choice]["additional_field"].split(": ")[1][:-1]}'] = questions[i]['answers'][choice]['additional_field_answer'] = ''
                                 df_answers.loc[idx, f'{column_name}_{questions[i]["answers"][choice]["additional_field"].split(": ")[1][:-1]}'] = questions[i]['answers'][choice]['additional_field_answer']
                             except KeyError:
                                 pass
@@ -191,6 +208,7 @@ while True:
                                     except KeyError:
                                         df_answers.loc[idx, f'{k}_{v[choice]["choice_text"]}'] = 0
                                     try:
+                                        df_answers[f'{k}_{v[choice]["additional_field"].split(": ")[1][:-1]}'] = v[choice]['additional_field_answer']
                                         df_answers.loc[idx, f'{k}_{v[choice]["additional_field"].split(": ")[1][:-1]}'] = v[choice]['additional_field_answer']
                                     except KeyError:
                                         pass
@@ -199,40 +217,54 @@ while True:
                     elif questions[i]['answer_type'] == 'Phone':
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
+                            # df_answers[column_name] = ''
+                            df_answers[column_name] = str(np.nan)
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
-                            df_answers.loc[idx, column_name] = np.nan
+                            pass
+                            # df_answers.loc[idx, column_name] = np.nan
 
                     # CPF question type
                     elif questions[i]['answer_type'] == 'CPF':
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
+                            # df_answers[column_name] = ''
+                            df_answers[column_name] = str(np.nan)
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
-                            df_answers.loc[idx, column_name] = np.nan
+                            pass
+                            # df_answers.loc[idx, column_name] = np.nan
 
                     # CNPJ question type
                     elif questions[i]['answer_type'] == 'CNPJ':
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
+                            # df_answers[column_name] = ''
+                            df_answers[column_name] = str(np.nan)
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
-                            df_answers.loc[idx, column_name] = np.nan
+                            pass
+                            # df_answers.loc[idx, column_name] = np.nan
 
                     # EMAIL question type
                     elif questions[i]['answer_type'] == 'Email':
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
+                            # df_answers[column_name] = ''
+                            df_answers[column_name] = str(np.nan)
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
-                            df_answers.loc[idx, column_name] = np.nan
+                            pass
+                            # df_answers.loc[idx, column_name] = np.nan
 
                 df = pd.concat([df, df_answers], ignore_index=False)
 
             print(f'Página: {page} - OK!')
             page += 1
+            total = total + count
         else:
             print('Fim da exportação!')
+            print(f'Total de avaliações: {total}')
             break
 
 
