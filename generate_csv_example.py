@@ -90,6 +90,7 @@ def request_api(access_token: str, page: int):
 
     return response_survey
 
+
 # Create empty dataframe
 df = pd.DataFrame()
 
@@ -136,7 +137,7 @@ while True:
                     if questions[i]['answer_type'] == 'NPS':
                         try:
                             # df_answers['nps_original'] = np.nan
-                            df_answers['nps_original'] = str(np.nan)
+                            df_answers['nps_original'] = None
                             # df_answers['nps_original'] = df_answers['nps_original'].astype('float')
                             df_answers.loc[idx, 'nps_original'] = questions[i]['answers'][0]['answer_value']
                         except KeyError:
@@ -144,7 +145,7 @@ while True:
                             # df_answers.loc[idx, 'nps_original'] = np.nan
                         try:
                             # df_answers['nps_tipo'] = ''
-                            df_answers['nps_tipo'] = str(np.nan)
+                            df_answers['nps_tipo'] = None
                             df_answers.loc[idx, 'nps_tipo'] = questions[i]['answers'][0]['answer_text']
                         except KeyError:
                             pass
@@ -156,14 +157,14 @@ while True:
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
                                 # df_answers[column_name] = ''
-                                df_answers[column_name] = str(np.nan)
+                                df_answers[column_name] = None
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
                             except KeyError:
                                 pass
                                 # df_answers.loc[idx, column_name] = np.nan
                             try:
                                 # df_answers[f'{column_name}_valor'] = np.nan
-                                df_answers[f'{column_name}_valor'] = str(np.nan)
+                                df_answers[f'{column_name}_valor'] = None
                                 df_answers.loc[idx, f'{column_name}_valor'] = float((questions[i]['answers'][choice]['choice_value']))
                             except (KeyError, TypeError):
                                 pass
@@ -175,7 +176,7 @@ while True:
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
                                 # df_answers[column_name] = ''
-                                df_answers[column_name] = str(np.nan)
+                                df_answers[column_name] = None
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_value']
                             except KeyError:
                                 pass
@@ -187,7 +188,7 @@ while True:
                             column_name = questions[i]['answers'][choice]['question_text']
                             try:
                                 # df_answers[column_name] = ''
-                                df_answers[column_name] = str(np.nan)
+                                df_answers[column_name] = None
                                 df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
                             except KeyError:
                                 pass
@@ -218,7 +219,7 @@ while True:
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
                             # df_answers[column_name] = ''
-                            df_answers[column_name] = str(np.nan)
+                            df_answers[column_name] = None
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
                             pass
@@ -229,7 +230,7 @@ while True:
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
                             # df_answers[column_name] = ''
-                            df_answers[column_name] = str(np.nan)
+                            df_answers[column_name] = None
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
                             pass
@@ -240,7 +241,7 @@ while True:
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
                             # df_answers[column_name] = ''
-                            df_answers[column_name] = str(np.nan)
+                            df_answers[column_name] = None
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
                             pass
@@ -251,7 +252,7 @@ while True:
                         column_name = questions[i]['answers'][0][0]['question_text']
                         try:
                             # df_answers[column_name] = ''
-                            df_answers[column_name] = str(np.nan)
+                            df_answers[column_name] = None
                             df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
                         except KeyError:
                             pass
