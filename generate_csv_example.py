@@ -18,6 +18,9 @@ login_pwd = 'XXXXXXXXXX'  # SENHA DO USUÁRIO DA API
 
 
 class GetEvaluations:
+    def __init__(self) -> None:
+        self.session = requests.Session()
+
     def get_evaluations(self, user: str, password: str, survey_id: str,
                         start_datetime: str, end_datetime: str, per_page=10000,
                         env='sistema', scope='answered_at') -> pd.DataFrame:
@@ -89,9 +92,6 @@ class GetEvaluations:
                 'Authorization': f'Bearer {self.access_token}',
             }
 
-            # Create session
-            self.session = requests.Session()
-
             response_survey = self.session.get(
                 f'https://{env}.solvis.net.br/api/v1/surveys/'
                 f'{self.survey_id}/evaluations?search_date_scope={scope}&'
@@ -109,9 +109,10 @@ class GetEvaluations:
         total = 0
         evaluations = []
 
+        print('Iniciando exportação de avaliações...')
+        time_start = time.perf_counter()
         while True:
             try:
-                time_start = time.perf_counter()
                 response = request_api()
             except (ConnectionError) as error:
                 raise Exception(error)
@@ -144,136 +145,80 @@ class GetEvaluations:
                     time_final = round(time_end - time_start, 2)
                     print('Fim da exportação!')
                     print(f'Total de avaliações: {total}')
-                    print(f'Tempo total: {time_final}')
+                    print(f'Tempo total: {time_final} segundo(s)')
                     break
+
+        # Close connection
+        self.session.close()
 
         return evaluations
 
 
 class DataProcessing:
     def data_processing(self, evaluations: list) -> pd.DataFrame:
-        # Create empty dataframe
-        df_temp = pd.DataFrame()
+        """Receives a list of dictionaries and return a processed dataframe
 
+        Args:
+            evaluations (list): A list of dictionaries
+
+        Returns:
+            pd.DataFrame: Processed dataframe
+        """
+        print('Iniciando processamento de dados...')
+        records = []
+
+        time_start = time.perf_counter()
         if evaluations:
-            for page in range(len(evaluations)):
-                for idx in range(len(evaluations[page])):
-                    questions = evaluations[page][idx].pop('formatted_answers')
-                    df_answers = pd.json_normalize(evaluations[page][idx])
-                    df_answers.set_index(pd.Index([idx]), inplace=True)
+            for page, eval_page in enumerate(evaluations):
+                for idx, evaluation in enumerate(eval_page):
+                    questions = evaluation.pop('formatted_answers')
+                    record = {**pd.json_normalize(evaluation, sep='__').iloc[0].to_dict()}
 
-                    for i in range(len(questions)):
-                        # NPS question type
-                        if questions[i]['answer_type'] == 'NPS':
-                            for choice in range(len(questions[i]['answers'])):
-                                column_name = questions[i]['answers'][choice]['question_text']
-                                try:
-                                    df_answers[column_name] = None
-                                    df_answers.loc[idx, column_name] = questions[i]['answers'][0]['answer_text']
-                                except KeyError:
-                                    pass
-                                try:
-                                    df_answers[f'{column_name}_valor'] = None
-                                    df_answers.loc[idx, f'{column_name}_valor'] = questions[i]['answers'][0]['answer_value']
-                                except KeyError:
-                                    pass
+                    for question in questions:
+                        answer_type = question['answer_type']
+                        for answer in question['answers']:
+                            if isinstance(answer, dict):
+                                base_key = answer['question_text']
+                            elif isinstance(answer, list):
+                                answer = answer[0]
+                                base_key = answer['question_text']
 
-                        # SCALE question type
-                        elif questions[i]['answer_type'] == 'Scale':
-                            for choice in range(len(questions[i]['answers'])):
-                                column_name = questions[i]['answers'][choice]['question_text']
-                                try:
-                                    df_answers[column_name] = None
-                                    df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
-                                except KeyError:
-                                    pass
-                                try:
-                                    df_answers[f'{column_name}_valor'] = None
-                                    df_answers.loc[idx, f'{column_name}_valor'] = float((questions[i]['answers'][choice]['choice_value']))
-                                except (KeyError, TypeError):
-                                    pass
+                            if answer_type == 'NPS':
+                                record[base_key] = answer.get('answer_text', None)
+                                record[f'{base_key}_valor'] = answer.get('answer_value', None)
 
-                        # TEXT question type
-                        elif questions[i]['answer_type'] in ('Text', 'Short Text'):
-                            for choice in range(len(questions[i]['answers'])):
-                                column_name = questions[i]['answers'][choice]['question_text']
-                                try:
-                                    df_answers[column_name] = None
-                                    df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_value']
-                                except KeyError:
-                                    pass
+                            elif answer_type == 'Scale':
+                                record[base_key] = answer.get('choice_text', None)
+                                record[f'{base_key}_valor'] = float(answer.get('choice_value', 0)) if answer.get('choice_value') is not None else None
 
-                        # MULTIPLE CHOICE question type
-                        elif questions[i]['answer_type'] == 'Multiple Choice':
-                            for choice in range(len(questions[i]['answers'])):
-                                column_name = questions[i]['answers'][choice]['question_text']
-                                try:
-                                    df_answers[column_name] = None
-                                    df_answers.loc[idx, column_name] = questions[i]['answers'][choice]['choice_text']
-                                except KeyError:
-                                    pass
-                                try:
-                                    df_answers[f'{column_name}_{questions[i]["answers"][choice]["additional_field"].split(": ")[1][:-1]}'] = questions[i]['answers'][choice]['additional_field_answer'] = ''
-                                    df_answers.loc[idx, f'{column_name}_{questions[i]["answers"][choice]["additional_field"].split(": ")[1][:-1]}'] = questions[i]['answers'][choice]['additional_field_answer']
-                                except KeyError:
-                                    pass
+                            elif answer_type == 'Multiple Choice':
+                                record[base_key] = answer.get('choice_text', None)
 
-                        # MULTIPLE RESPONSE question type
-                        elif questions[i]['answer_type'] == 'Multiple Response':
-                            for k, v in questions[i]['answers'].items():
-                                for choice in range(len(v)):
-                                    if v[choice]['choice_text'] is not None:
-                                        try:
-                                            df_answers.loc[idx, f'{k}_{v[choice]["choice_text"]}'] = 1
-                                        except KeyError:
-                                            df_answers.loc[idx, f'{k}_{v[choice]["choice_text"]}'] = 0
-                                        try:
-                                            df_answers[f'{k}_{v[choice]["additional_field"].split(": ")[1][:-1]}'] = v[choice]['additional_field_answer']
-                                            df_answers.loc[idx, f'{k}_{v[choice]["additional_field"].split(": ")[1][:-1]}'] = v[choice]['additional_field_answer']
-                                        except KeyError:
-                                            pass
+                            elif answer_type in ['Text', 'Short Text']:
+                                record[f'{base_key}'] = answer.get('choice_value', None)
 
-                        # PHONE question type
-                        elif questions[i]['answer_type'] == 'Phone':
-                            column_name = questions[i]['answers'][0][0]['question_text']
-                            try:
-                                df_answers[column_name] = None
-                                df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
-                            except KeyError:
-                                pass
+                            elif answer_type in ['Phone', 'CPF', 'CNPJ', 'Email']:
+                                record[f'{base_key}'] = answer.get('choice_text', None)
 
-                        # CPF question type
-                        elif questions[i]['answer_type'] == 'CPF':
-                            column_name = questions[i]['answers'][0][0]['question_text']
-                            try:
-                                df_answers[column_name] = None
-                                df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
-                            except KeyError:
-                                pass
+                            elif answer_type == 'Multiple Response':
+                                for question_text, choices in question['answers'].items():
+                                    for choice in choices:
+                                        key = f"{question_text}_{choice['choice_text']}"
+                                        record[key] = 1
+                                        if 'additional_field' in choice and 'additional_field_answer' in choice:
+                                            additional_field_key = choice['additional_field']
+                                            additional_field_value = choice['additional_field_answer']
+                                            record[f"{key}_{additional_field_key}"] = additional_field_value
 
-                        # CNPJ question type
-                        elif questions[i]['answer_type'] == 'CNPJ':
-                            column_name = questions[i]['answers'][0][0]['question_text']
-                            try:
-                                df_answers[column_name] = None
-                                df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
-                            except KeyError:
-                                pass
+                    records.append(record)
+                print(f'Página: {page + 1} - OK!')
 
-                        # EMAIL question type
-                        elif questions[i]['answer_type'] == 'Email':
-                            column_name = questions[i]['answers'][0][0]['question_text']
-                            try:
-                                df_answers[column_name] = None
-                                df_answers.loc[idx, column_name] = questions[i]['answers'][0][0]['choice_text']
-                            except KeyError:
-                                pass
-
-                    df_temp = pd.concat([df_temp, df_answers], ignore_index=False)
-                print(f'Página: {page} - OK!')
+            time_end = time.perf_counter()
             print('Fim do processamento de dados!')
+            print(f'Tempo total: {round(time_end - time_start, 2)} segundo(s)')
 
-        return df_temp
+        df_final = pd.DataFrame(records)
+        return df_final
 
 
 # Load module
