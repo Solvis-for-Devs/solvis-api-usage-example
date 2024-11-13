@@ -20,11 +20,20 @@ login_pwd = 'XXXXXXXXXX'  # SENHA DO USUÁRIO DA API
 class GetEvaluations:
     def __init__(self) -> None:
         self.session = requests.Session()
+        self.access_token = None
 
-    def get_evaluations(self, user: str, password: str, survey_id: str,
-                        start_datetime: str, end_datetime: str, per_page=10000,
-                        env='sistema', scope='answered_at') -> pd.DataFrame:
-        """ Get evaluations
+    def get_evaluations(
+        self,
+        user: str | Any,
+        password: str | Any,
+        survey_id: str | Any,
+        start_datetime: str | Any,
+        end_datetime: str | Any,
+        per_page=10000,
+        env='sistema',
+        scope='answered_at',
+    ) -> list[dict]:
+        """Get evaluations
 
         Args:
             user (str): API username
@@ -32,7 +41,7 @@ class GetEvaluations:
             survey_id (str): Survey ID
             start_datetime (str): Start date (format YYYY-MM-DDTHH:MM:SS)
             end_datetime (str): End date (format YYYY-MM-DDTHH:MM:SS)
-            per_page (int): Total evaluations per page (max: 100)
+            per_page (int): Total evaluations per page (max: 10000)
             env (str): [sistema, staging]
             scope (str): [answered_at, received_at]
 
@@ -55,7 +64,7 @@ class GetEvaluations:
             raise Exception('O período selecionado excede o limite máximo de 31 dias!')
 
         def request_api():
-            """ Get API and return JSON
+            """Get API and return JSON
 
             Args:
             Returns:
@@ -77,7 +86,7 @@ class GetEvaluations:
             response = requests.post(
                 f'https://{env}.solvis.net.br/api/v1/oauth/token',
                 headers=headers_token,
-                data=data_token
+                data=data_token,
             )
 
             # Get access token
@@ -114,24 +123,22 @@ class GetEvaluations:
         while True:
             try:
                 response = request_api()
-            except (ConnectionError) as error:
+            except (ConnectionError, ConnectionAbortedError) as error:
                 raise Exception(error)
 
-            if response.status_code == 400:
-                raise Exception('Erro 400: Bad request.')
-
-            elif response.status_code == 401:
-                print('Erro 401: Token inválido.')
-
-            elif response.status_code == 500:
-                raise Exception('Erro 500: Servidor indisponível')
-
-            elif response.status_code == 200:
+            if response.status_code != 200:
+                raise Exception(f'Erro: {response.status_code}')
+            else:
                 try:
                     json = response.json()
                 except JSONDecodeError as error:
                     raise Exception(error)
 
+                try:
+                    if json['error']:
+                        raise Exception(json['error'])
+                except KeyError:
+                    pass
                 if json['data']:
                     answers = json['data']
                     evaluations.append(answers)
@@ -172,7 +179,9 @@ class DataProcessing:
             for page, eval_page in enumerate(evaluations):
                 for idx, evaluation in enumerate(eval_page):
                     questions = evaluation.pop('formatted_answers')
-                    record = {**pd.json_normalize(evaluation, sep='__').iloc[0].to_dict()}
+                    record = {
+                        **pd.json_normalize(evaluation, sep='__').iloc[0].to_dict()
+                    }
 
                     for question in questions:
                         answer_type = question['answer_type']
@@ -185,14 +194,35 @@ class DataProcessing:
 
                             if answer_type == 'NPS':
                                 record[base_key] = answer.get('answer_text', None)
-                                record[f'{base_key}_valor'] = answer.get('answer_value', None)
+                                record[f'{base_key}_valor'] = answer.get(
+                                    'answer_value', None
+                                )
 
                             elif answer_type == 'Scale':
                                 record[base_key] = answer.get('choice_text', None)
-                                record[f'{base_key}_valor'] = float(answer.get('choice_value', 0)) if answer.get('choice_value') is not None else None
+                                record[f'{base_key}_valor'] = (
+                                    float(answer.get('choice_value', 0))
+                                    if answer.get('choice_value') is not None
+                                    else None
+                                )
 
                             elif answer_type == 'Multiple Choice':
-                                record[base_key] = answer.get('choice_text', None)
+                                for field in answer:
+                                    if 'additional_field_answer' in field:
+                                        key = f"{answer['question_text']}_{answer['choice_text']}"
+                                        additional_field_key = answer[
+                                            'additional_field'
+                                        ]
+                                        additional_field_value = answer[
+                                            'additional_field_answer'
+                                        ]
+                                        record[f'{key}_{additional_field_key}'] = (
+                                            additional_field_value
+                                        )
+                                    else:
+                                        record[base_key] = answer.get(
+                                            'choice_text', None
+                                        )
 
                             elif answer_type in ['Text', 'Short Text']:
                                 record[f'{base_key}'] = answer.get('choice_value', None)
@@ -201,14 +231,25 @@ class DataProcessing:
                                 record[f'{base_key}'] = answer.get('choice_text', None)
 
                             elif answer_type == 'Multiple Response':
-                                for question_text, choices in question['answers'].items():
+                                for question_text, choices in question[
+                                    'answers'
+                                ].items():
                                     for choice in choices:
                                         key = f"{question_text}_{choice['choice_text']}"
                                         record[key] = 1
-                                        if 'additional_field' in choice and 'additional_field_answer' in choice:
-                                            additional_field_key = choice['additional_field']
-                                            additional_field_value = choice['additional_field_answer']
-                                            record[f"{key}_{additional_field_key}"] = additional_field_value
+                                        if (
+                                            'additional_field' in choice
+                                            and 'additional_field_answer' in choice
+                                        ):
+                                            additional_field_key = choice[
+                                                'additional_field'
+                                            ]
+                                            additional_field_value = choice[
+                                                'additional_field_answer'
+                                            ]
+                                            record[f'{key}_{additional_field_key}'] = (
+                                                additional_field_value
+                                            )
 
                     records.append(record)
                 print(f'Página: {page + 1} - OK!')
@@ -239,9 +280,4 @@ evaluations = api.get_evaluations(
 df = data.data_processing(evaluations)
 
 
-# Export dataframe
-if df.shape[0] > 0:
-    df.to_csv(f'resultados_{survey_id}_{start_date.split('T')[0]}-a-{end_date.split('T')[0]}.csv', index=False)
-else:
-    print('Sem respostas no período!')
-print('FIM!')
+# Realizar a exportação desse dataframe (df) da maneira que desejar.
